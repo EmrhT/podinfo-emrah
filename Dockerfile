@@ -24,7 +24,7 @@ ARG BUILD_DATE
 ARG VERSION
 ARG REVISION
 
-LABEL maintainer="stefanprodan"
+LABEL maintainer="EmrhT"
 
 RUN addgroup -S app \
     && adduser -S -G app app \

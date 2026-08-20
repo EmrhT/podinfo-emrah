@@ -1,10 +1,7 @@
 name: e2e
 
 on:
-  pull_request:
-  push:
-    branches:
-      - 'master'
+  workflow_dispatch:
 
 permissions:
   contents: read
