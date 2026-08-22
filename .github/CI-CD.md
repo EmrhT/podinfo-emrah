@@ -19,6 +19,8 @@ Repository secrets:
 - `CF_ACCESS_CLIENT_ID`
 - `CF_ACCESS_CLIENT_SECRET`
 - `SONAR_TOKEN`
+- `SONAR_MTLS_PKCS12_BASE64`
+- `SONAR_MTLS_KEYSTORE_PASSWORD`
 - `ZAP_API_KEY`
 - `ARGOCD_AUTH_TOKEN`
 - `IAC_PROMOTER_PRIVATE_KEY`
@@ -29,7 +31,7 @@ Repository variable:
 
 The Cloudflare service token is named `github-actions-podinfo-dev`. The GitHub App token is scoped to `EmrhT/ultimate-iac` with Contents and Pull requests write permissions.
 
-The runner has no Kubernetes credentials. SonarQube, Trivy, ZAP, and Argo CD are reached through their Cloudflare Access-protected CI hostnames. Argo CD is the only component that writes to Kubernetes.
+The runner has no Kubernetes credentials. SonarQube is reached through its Cloudflare mTLS-protected CI hostname; its PKCS#12 client keystore is reconstructed only in the runner's temporary directory. Trivy, ZAP, and Argo CD are reached through their Cloudflare Access-protected CI hostnames. Argo CD is the only component that writes to Kubernetes.
 
 ## Security gates
 
@@ -39,4 +41,3 @@ The runner has no Kubernetes credentials. SonarQube, Trivy, ZAP, and Argo CD are
 - Production cannot merge until the production overlay receives the required CODEOWNERS approval.
 
 ZAP uses a clean volatile session for every CI scan so findings from manual experiments cannot contaminate a deployment gate. Do not run a manual scan in the shared ZAP instance while `delivery` is in its DAST job.
-

@@ -46,14 +46,34 @@ jobs:
       - name: Run unit tests with coverage
         run: make test
 
-      - name: Prepare private SonarQube transport settings
+      - name: Prepare SonarQube mTLS settings
         env:
-          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
-          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+          SONAR_MTLS_PKCS12_BASE64: ${{ secrets.SONAR_MTLS_PKCS12_BASE64 }}
+          SONAR_MTLS_KEYSTORE_PASSWORD: ${{ secrets.SONAR_MTLS_KEYSTORE_PASSWORD }}
         run: |
+          install -d -m 700 "$RUNNER_TEMP/sonarqube"
+          printf '%s' "$SONAR_MTLS_PKCS12_BASE64" \
+            | base64 --decode >"$RUNNER_TEMP/sonarqube/client.p12"
+          chmod 600 "$RUNNER_TEMP/sonarqube/client.p12"
+
+          escape_property() {
+            local value=$1
+            value=${value//\\/\\\\}
+            value=${value//$'\n'/\\n}
+            value=${value//$'\r'/\\r}
+            value=${value//$'\t'/\\t}
+            value=${value// /\\ }
+            value=${value//:/\\:}
+            value=${value//=/\\=}
+            value=${value//#/\\#}
+            value=${value//!/\\!}
+            printf '%s' "$value"
+          }
+
           cp sonar-project.properties "$RUNNER_TEMP/sonar-project.properties"
-          printf '\nsonar.scanner.httpExtraHeaders=CF-Access-Client-Id: %s,CF-Access-Client-Secret: %s\n' \
-            "$CF_ACCESS_CLIENT_ID" "$CF_ACCESS_CLIENT_SECRET" \
+          printf '\nsonar.scanner.keystorePath=%s\nsonar.scanner.keystorePassword=%s\n' \
+            "$RUNNER_TEMP/sonarqube/client.p12" \
+            "$(escape_property "$SONAR_MTLS_KEYSTORE_PASSWORD")" \
             >>"$RUNNER_TEMP/sonar-project.properties"
 
       - name: Analyze source with SonarQube
@@ -67,6 +87,12 @@ jobs:
             -Dsonar.projectVersion=${{ github.sha }}
             -Dsonar.qualitygate.wait=true
             -Dsonar.qualitygate.timeout=300
+
+      - name: Remove temporary SonarQube credentials
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/sonarqube/client.p12"
+          rm -f "$RUNNER_TEMP/sonar-project.properties"
 
       - name: Verify generated files are committed
         run: |
