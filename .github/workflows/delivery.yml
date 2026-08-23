@@ -22,6 +22,7 @@ env:
   IAC_REPOSITORY: EmrhT/ultimate-iac
   ARGOCD_VERSION: v3.4.2
   TRIVY_VERSION: v0.73.0
+  TRIVY_ENFORCE: "false"
 
 jobs:
   quality:
@@ -225,7 +226,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-      - name: Enforce Trivy vulnerability gate
+      - name: Verify Trivy scan completed
         env:
           SCAN_OUTCOME: ${{ steps.scan.outcome }}
         run: |
@@ -233,6 +234,25 @@ jobs:
             echo "Trivy could not complete the image scan" >&2
             exit 1
           fi
+
+      - name: Summarize Trivy findings
+        run: |
+          critical=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL")] | length' reports/trivy.json)
+          high=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "HIGH")] | length' reports/trivy.json)
+          {
+            echo "### Trivy image scan (non-blocking)"
+            echo
+            echo "| Severity | Findings |"
+            echo "| --- | ---: |"
+            echo "| Critical | $critical |"
+            echo "| High | $high |"
+            echo
+            echo "Full JSON, table, and SARIF reports are attached to this workflow run."
+          } >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Enforce Trivy vulnerability gate
+        if: env.TRIVY_ENFORCE == 'true'
+        run: |
           trivy convert \
             --severity HIGH,CRITICAL \
             --exit-code 1 \

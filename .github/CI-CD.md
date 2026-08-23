@@ -36,7 +36,7 @@ The runner has no Kubernetes credentials. SonarQube is reached through its Cloud
 ## Security gates
 
 - SonarQube must complete analysis and pass its quality gate.
-- Trivy fails on fixed HIGH or CRITICAL image vulnerabilities. JSON, table, and SARIF reports are retained for 14 days.
+- Trivy must complete its image scan, but vulnerability findings are currently non-blocking (`TRIVY_ENFORCE=false`). HIGH and CRITICAL counts are added to the job summary, and JSON, table, and SARIF reports are retained for 14 days. Set `TRIVY_ENFORCE=true` to restore the HIGH/CRITICAL deployment gate.
 - ZAP fails on automation-plan errors or High-risk alerts. Its progress and alert JSON are retained for 14 days.
 - Production cannot merge until the production overlay receives the required CODEOWNERS approval.
 
