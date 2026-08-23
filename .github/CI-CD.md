@@ -6,7 +6,7 @@ The `delivery` workflow owns the lab-a delivery sequence:
 2. Build `linux/amd64`, publish `ghcr.io/emrht/podinfo-emrah:sha-<commit>`, and retain its immutable digest.
 3. Scan that digest with the Trivy client against the homelab Trivy server.
 4. Open and automatically merge a digest-only PR for lab-a dev.
-5. Ask Argo CD to sync dev, then wait for the exact Git revision, image digest, and Healthy state.
+5. Ask Argo CD to sync dev, then wait for the promoted image digest and Healthy state. The observed Git revision may be newer than the promotion commit when unrelated GitOps changes reach `main` first.
 6. Trigger the in-cluster ZAP automation plan against the internal dev Service and upload its results.
 7. Open a digest-only production PR and enable auto-merge. CODEOWNERS approval by `@EmrhT` is required; after approval Argo CD auto-syncs production.
 

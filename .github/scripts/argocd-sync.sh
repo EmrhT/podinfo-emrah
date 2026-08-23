@@ -19,21 +19,29 @@ argo=(
   --header "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET"
 )
 
-echo "Waiting for $ARGOCD_APP to observe Git revision $IAC_REVISION"
+echo "Waiting for $ARGOCD_APP to observe image digest $IMAGE_DIGEST"
+echo "The promotion was merged at Git revision $IAC_REVISION; main may advance beyond it."
+observed_digest=false
 for _ in {1..60}; do
   app_json=$("${argo[@]}" app get "$ARGOCD_APP" --refresh -o json)
   observed_revision=$(jq -r '.status.sync.revision // ""' <<<"$app_json")
-  if [[ $observed_revision == "$IAC_REVISION" ]]; then
+  if jq -e --arg digest "$IMAGE_DIGEST" \
+    '(.status.summary.images // []) | any(endswith("@" + $digest))' \
+    <<<"$app_json" >/dev/null; then
+    observed_digest=true
     break
   fi
   sleep 10
 done
 
-if [[ ${observed_revision:-} != "$IAC_REVISION" ]]; then
-  echo "$ARGOCD_APP did not observe Git revision $IAC_REVISION within 10 minutes" >&2
+if [[ $observed_digest != true ]]; then
+  echo "$ARGOCD_APP did not observe image digest $IMAGE_DIGEST within 10 minutes" >&2
+  echo "Last observed Git revision: ${observed_revision:-unknown}" >&2
   "${argo[@]}" app get "$ARGOCD_APP"
   exit 1
 fi
+
+echo "$ARGOCD_APP observed $IMAGE_DIGEST at Git revision $observed_revision"
 
 # Argo CD remains the only component that writes to Kubernetes. The runner asks
 # it to reconcile the Git revision already merged into the GitOps repository.
@@ -42,11 +50,10 @@ fi
 
 app_json=$("${argo[@]}" app get "$ARGOCD_APP" --refresh -o json)
 if ! jq -e --arg digest "$IMAGE_DIGEST" \
-  '.status.summary.images | any(endswith("@" + $digest))' <<<"$app_json" >/dev/null; then
+  '(.status.summary.images // []) | any(endswith("@" + $digest))' <<<"$app_json" >/dev/null; then
   echo "$ARGOCD_APP is healthy, but it does not report the expected image digest $IMAGE_DIGEST" >&2
   jq '.status.summary.images' <<<"$app_json" >&2
   exit 1
 fi
 
 echo "$ARGOCD_APP is Synced and Healthy on $IMAGE_DIGEST"
-
