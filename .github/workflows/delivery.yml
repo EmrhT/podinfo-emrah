@@ -21,7 +21,7 @@ env:
   ARGOCD_SERVER: ci-argocd.no-name.win
   IAC_REPOSITORY: EmrhT/ultimate-iac
   ARGOCD_VERSION: v3.4.2
-  TRIVY_VERSION: 0.73.0
+  TRIVY_VERSION: v0.73.0
 
 jobs:
   quality:
