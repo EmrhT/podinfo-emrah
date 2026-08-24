@@ -77,10 +77,33 @@ jobs:
             "$(escape_property "$SONAR_MTLS_KEYSTORE_PASSWORD")" \
             >>"$RUNNER_TEMP/sonar-project.properties"
 
+      - name: Restore SonarQube analyzer cache
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: ${{ runner.temp }}/.sonar/cache
+          key: ${{ runner.os }}-${{ runner.arch }}-sonarqube-26.7-analyzers-v1
+
       - name: Analyze source with SonarQube
+        id: sonarqube-scan
+        continue-on-error: true
         uses: SonarSource/sonarqube-scan-action@22918119ff8e1ca75a623e15c8296b6ea4fbe28f # v8.2.1
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_USER_HOME: ${{ runner.temp }}/.sonar
+          SONAR_SCANNER_JAVA_OPTS: -Xmx512m
+        with:
+          args: >-
+            -Dproject.settings=${{ runner.temp }}/sonar-project.properties
+            -Dsonar.projectVersion=${{ github.sha }}
+            -Dsonar.qualitygate.wait=true
+            -Dsonar.qualitygate.timeout=300
+
+      - name: Retry SonarQube analysis once
+        if: steps.sonarqube-scan.outcome == 'failure'
+        uses: SonarSource/sonarqube-scan-action@22918119ff8e1ca75a623e15c8296b6ea4fbe28f # v8.2.1
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_USER_HOME: ${{ runner.temp }}/.sonar
           SONAR_SCANNER_JAVA_OPTS: -Xmx512m
         with:
           args: >-
