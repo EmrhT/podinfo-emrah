@@ -347,7 +347,7 @@ jobs:
           add-paths: |
             argocd/applications/podinfo/clusters/lab-a/dev/kustomization.yaml
 
-      - name: Auto-merge dev promotion and capture revision
+      - name: Merge dev promotion and capture revision
         id: merge
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -355,7 +355,7 @@ jobs:
           IMAGE_DIGEST: ${{ needs.build.outputs.digest }}
         run: |
           if [[ -n $PR_NUMBER ]]; then
-            gh pr merge "$PR_NUMBER" --repo "$IAC_REPOSITORY" --auto --squash
+            gh pr merge "$PR_NUMBER" --repo "$IAC_REPOSITORY" --squash
             for _ in {1..60}; do
               state=$(gh pr view "$PR_NUMBER" --repo "$IAC_REPOSITORY" --json state --jq .state)
               [[ $state == MERGED ]] && break
