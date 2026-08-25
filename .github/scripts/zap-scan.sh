@@ -65,10 +65,14 @@ high_alerts=$(jq '[.alerts[] | select(.risk == "High" or .riskcode == "3")] | le
   "$report_dir/zap-alerts.json")
 
 echo "ZAP finished at $finished with $plan_errors plan error(s) and $high_alerts high-risk alert(s)"
+if (( plan_errors > 0 )); then
+  echo "ZAP automation-plan errors:" >&2
+  jq -r '.error[] | if type == "string" then "- \(.)" else "- \(.message // tostring)" end' \
+    "$report_dir/zap-plan-progress.json" >&2
+fi
 jq -r '.alerts[] | select(.risk == "High" or .riskcode == "3") | "- [\(.risk)] \(.alert): \(.url)"' \
   "$report_dir/zap-alerts.json" || true
 
 if (( plan_errors > 0 || high_alerts > 0 )); then
   exit 1
 fi
-
