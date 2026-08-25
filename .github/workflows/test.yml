@@ -16,13 +16,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/runner-cleanup
-      - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: 1.26.x
-          cache-dependency-path: |
-            **/go.sum
-            **/go.mod
       - name: Setup Flux Schema CLI
         uses: fluxcd/flux-schema/actions/setup@9946a7cd4487b6d47cc9cd27d19ec8a274941af6 # v0.11.0
       - name: Setup Helm
@@ -33,8 +26,6 @@ jobs:
         uses: cue-lang/setup-cue@a93fa358375740cd8b0078f76355512b9208acb1 # v1.0.1
       - name: Setup Timoni
         uses: stefanprodan/timoni/actions/setup@69e421aebbed979ded721df0da2a54428c5b4b9c # v0.27.0
-      - name: Run unit tests
-        run: make test
       - name: Validate Helm chart
         run: |
           helm lint ./charts/podinfo/
@@ -61,6 +52,7 @@ jobs:
       - name: Check if working tree is dirty
         run: |
           if [[ $(git diff --stat) != '' ]]; then
-            echo 'run make test and commit changes'
+            echo 'generated or formatted files are not committed'
+            git diff
             exit 1
           fi

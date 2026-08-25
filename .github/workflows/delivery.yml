@@ -1,10 +1,13 @@
-name: delivery
+name: application PR delivery
 
 on:
-  push:
+  pull_request:
     branches:
       - master
-  workflow_dispatch:
+    types:
+      - opened
+      - synchronize
+      - reopened
 
 permissions:
   contents: read
@@ -23,15 +26,20 @@ env:
   ARGOCD_VERSION: v3.4.2
   TRIVY_VERSION: v0.73.0
   TRIVY_ENFORCE: "false"
+  SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+  APPLICATION_PR: ${{ github.event.pull_request.number }}
 
 jobs:
   quality:
     name: Unit tests and SAST
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - name: Checkout source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.SOURCE_SHA }}
 
       - name: Reclaim runner disk space
         uses: ./.github/actions/runner-cleanup
@@ -94,7 +102,7 @@ jobs:
         with:
           args: >-
             -Dproject.settings=${{ runner.temp }}/sonar-project.properties
-            -Dsonar.projectVersion=${{ github.sha }}
+            -Dsonar.projectVersion=${{ env.SOURCE_SHA }}
             -Dsonar.qualitygate.wait=true
             -Dsonar.qualitygate.timeout=300
 
@@ -108,7 +116,7 @@ jobs:
         with:
           args: >-
             -Dproject.settings=${{ runner.temp }}/sonar-project.properties
-            -Dsonar.projectVersion=${{ github.sha }}
+            -Dsonar.projectVersion=${{ env.SOURCE_SHA }}
             -Dsonar.qualitygate.wait=true
             -Dsonar.qualitygate.timeout=300
 
@@ -142,6 +150,8 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.SOURCE_SHA }}
 
       - name: Reclaim runner disk space
         uses: ./.github/actions/runner-cleanup
@@ -149,9 +159,9 @@ jobs:
       - name: Define immutable image identity
         id: identity
         run: |
-          short_sha=${GITHUB_SHA::8}
+          short_sha=${SOURCE_SHA::8}
           echo "short-sha=$short_sha" >>"$GITHUB_OUTPUT"
-          echo "image-tag=sha-$short_sha" >>"$GITHUB_OUTPUT"
+          echo "image-tag=sha-$SOURCE_SHA" >>"$GITHUB_OUTPUT"
 
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
@@ -170,10 +180,9 @@ jobs:
           images: ${{ env.IMAGE_REPOSITORY }}
           tags: |
             type=raw,value=${{ steps.identity.outputs.image-tag }}
-            type=raw,value=latest
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.revision=${{ env.SOURCE_SHA }}
 
       - name: Build and push linux/amd64 image
         id: build
@@ -188,7 +197,7 @@ jobs:
           build-args: |
             BUILD_DATE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
             VERSION=${{ steps.identity.outputs.image-tag }}
-            REVISION=${{ github.sha }}
+            REVISION=${{ env.SOURCE_SHA }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: mode=max
@@ -200,6 +209,39 @@ jobs:
           echo '```text' >>"$GITHUB_STEP_SUMMARY"
           echo "${IMAGE_REPOSITORY}@${{ steps.build.outputs.digest }}" >>"$GITHUB_STEP_SUMMARY"
           echo '```' >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Record immutable promotion metadata
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+          IMAGE_TAG: ${{ steps.identity.outputs.image-tag }}
+          APPLICATION_PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          mkdir -p promotion-metadata
+          jq -n \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg pr "$APPLICATION_PR" \
+            --arg pr_url "$APPLICATION_PR_URL" \
+            --arg source_sha "$SOURCE_SHA" \
+            --arg image_repository "$IMAGE_REPOSITORY" \
+            --arg image_tag "$IMAGE_TAG" \
+            --arg image_digest "$IMAGE_DIGEST" \
+            '{
+              repository: $repository,
+              application_pr: ($pr | tonumber),
+              application_pr_url: $pr_url,
+              source_sha: $source_sha,
+              image_repository: $image_repository,
+              image_tag: $image_tag,
+              image_digest: $image_digest
+            }' >promotion-metadata/image.json
+
+      - name: Upload immutable promotion metadata
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: promotion-metadata-pr-${{ env.APPLICATION_PR }}-${{ env.SOURCE_SHA }}
+          path: promotion-metadata/image.json
+          if-no-files-found: error
+          retention-days: 30
 
   trivy:
     name: Trivy image scan
@@ -294,6 +336,8 @@ jobs:
     steps:
       - name: Checkout pipeline helpers
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.SOURCE_SHA }}
 
       - name: Create scoped GitHub App token
         id: app-token
@@ -336,12 +380,15 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
           path: ultimate-iac
           base: main
-          branch: promote/podinfo-lab-a-dev-${{ needs.build.outputs.short-sha }}
+          branch: promote/podinfo-lab-a-dev
           delete-branch: true
-          commit-message: Promote podinfo ${{ needs.build.outputs.image-tag }} to lab-a dev
-          title: Promote podinfo ${{ needs.build.outputs.image-tag }} to lab-a dev
+          commit-message: Promote podinfo sha-${{ needs.build.outputs.short-sha }} to lab-a dev
+          title: Promote podinfo sha-${{ needs.build.outputs.short-sha }} to lab-a dev
           body: |
-            Automated dev promotion from `${{ github.repository }}@${{ github.sha }}`.
+            Automated dev promotion for application PR #${{ env.APPLICATION_PR }}.
+
+            Source: `${{ github.repository }}@${{ env.SOURCE_SHA }}`
+            Application PR: `${{ github.event.pull_request.html_url }}`
 
             Image: `${{ env.IMAGE_REPOSITORY }}@${{ needs.build.outputs.digest }}`
           add-paths: |
@@ -355,7 +402,7 @@ jobs:
           IMAGE_DIGEST: ${{ needs.build.outputs.digest }}
         run: |
           if [[ -n $PR_NUMBER ]]; then
-            gh pr merge "$PR_NUMBER" --repo "$IAC_REPOSITORY" --squash
+            gh pr merge "$PR_NUMBER" --repo "$IAC_REPOSITORY" --auto --squash
             for _ in {1..60}; do
               state=$(gh pr view "$PR_NUMBER" --repo "$IAC_REPOSITORY" --json state --jq .state)
               [[ $state == MERGED ]] && break
@@ -391,6 +438,8 @@ jobs:
     steps:
       - name: Checkout pipeline helpers
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.SOURCE_SHA }}
 
       - name: Install pinned Argo CD CLI
         run: |
@@ -421,6 +470,8 @@ jobs:
     steps:
       - name: Checkout pipeline helpers
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.SOURCE_SHA }}
 
       - name: Run in-cluster ZAP automation plan
         id: zap
@@ -446,91 +497,79 @@ jobs:
           echo "ZAP found a high-risk alert or could not complete its automation plan" >&2
           exit 1
 
-  promote-prod:
-    name: Request manual lab-a production promotion
+      - name: Record successful dev security validation
+        env:
+          IMAGE_DIGEST: ${{ needs.build.outputs.digest }}
+        run: |
+          mkdir -p promotion-decision
+          jq -n \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg pr "$APPLICATION_PR" \
+            --arg source_sha "$SOURCE_SHA" \
+            --arg image_repository "$IMAGE_REPOSITORY" \
+            --arg image_digest "$IMAGE_DIGEST" \
+            --arg validated_at "$(date --utc --iso-8601=seconds)" \
+            '{
+              repository: $repository,
+              application_pr: ($pr | tonumber),
+              source_sha: $source_sha,
+              image_repository: $image_repository,
+              image_digest: $image_digest,
+              environment: "lab-a-dev",
+              dast: "success",
+              validated_at: $validated_at
+            }' >promotion-decision/dev-security-validation.json
+
+      - name: Upload successful dev security validation
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: promotion-decision-pr-${{ env.APPLICATION_PR }}-${{ env.SOURCE_SHA }}
+          path: promotion-decision/dev-security-validation.json
+          if-no-files-found: error
+          retention-days: 30
+
+  pr-gate:
+    name: PR delivery gate
+    if: always()
     needs:
+      - quality
       - build
+      - trivy
+      - promote-dev
+      - deploy-dev
       - dast
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     steps:
-      - name: Checkout pipeline helpers
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Create scoped GitHub App token
-        id: app-token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
-        with:
-          client-id: ${{ vars.IAC_PROMOTER_CLIENT_ID }}
-          private-key: ${{ secrets.IAC_PROMOTER_PRIVATE_KEY }}
-          owner: EmrhT
-          repositories: ultimate-iac
-          permission-contents: write
-          permission-pull-requests: write
-
-      - name: Checkout GitOps repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: ${{ env.IAC_REPOSITORY }}
-          ref: main
-          token: ${{ steps.app-token.outputs.token }}
-          path: ultimate-iac
-
-      - name: Update only the lab-a prod digest
+      - name: Require every delivery stage
         env:
-          IMAGE_DIGEST: ${{ needs.build.outputs.digest }}
+          QUALITY_RESULT: ${{ needs.quality.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
+          TRIVY_RESULT: ${{ needs.trivy.result }}
+          PROMOTE_DEV_RESULT: ${{ needs.promote-dev.result }}
+          DEPLOY_DEV_RESULT: ${{ needs.deploy-dev.result }}
+          DAST_RESULT: ${{ needs.dast.result }}
         run: |
-          cd ultimate-iac
-          ../.github/scripts/update-podinfo-digest.sh \
-            argocd/applications/podinfo/clusters/lab-a/prod/kustomization.yaml \
-            "$IMAGE_DIGEST"
-          kubectl kustomize argocd/applications/podinfo/clusters/lab-a/prod >/dev/null
-          changed=$(git diff --name-only)
-          [[ -z $changed || $changed == "argocd/applications/podinfo/clusters/lab-a/prod/kustomization.yaml" ]] || {
-            echo "unexpected GitOps changes: $changed" >&2
+          failed=false
+          for result in \
+            "$QUALITY_RESULT" \
+            "$BUILD_RESULT" \
+            "$TRIVY_RESULT" \
+            "$PROMOTE_DEV_RESULT" \
+            "$DEPLOY_DEV_RESULT" \
+            "$DAST_RESULT"; do
+            [[ $result == success ]] || failed=true
+          done
+
+          if [[ $failed == true ]]; then
+            printf '%s\n' \
+              "quality=$QUALITY_RESULT" \
+              "build=$BUILD_RESULT" \
+              "trivy=$TRIVY_RESULT" \
+              "promote-dev=$PROMOTE_DEV_RESULT" \
+              "deploy-dev=$DEPLOY_DEV_RESULT" \
+              "dast=$DAST_RESULT" >&2
             exit 1
-          }
-
-      - name: Open or update production promotion PR
-        id: cpr
-        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
-        with:
-          token: ${{ steps.app-token.outputs.token }}
-          path: ultimate-iac
-          base: main
-          branch: promote/podinfo-lab-a-prod-${{ needs.build.outputs.short-sha }}
-          delete-branch: true
-          commit-message: Promote podinfo ${{ needs.build.outputs.image-tag }} to lab-a prod
-          title: Promote podinfo ${{ needs.build.outputs.image-tag }} to lab-a prod
-          body: |
-            Production promotion requested after the dev deployment and ZAP gate passed.
-
-            Source: `${{ github.repository }}@${{ github.sha }}`
-            Image: `${{ env.IMAGE_REPOSITORY }}@${{ needs.build.outputs.digest }}`
-
-            Approval by `@EmrhT` is required by CODEOWNERS before this PR can merge.
-          add-paths: |
-            argocd/applications/podinfo/clusters/lab-a/prod/kustomization.yaml
-
-      - name: Enable auto-merge after manual admin approval
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
-          IMAGE_DIGEST: ${{ needs.build.outputs.digest }}
-        run: |
-          if [[ -n $PR_NUMBER ]]; then
-            gh pr merge "$PR_NUMBER" --repo "$IAC_REPOSITORY" --auto --squash
-            pr_url=$(gh pr view "$PR_NUMBER" --repo "$IAC_REPOSITORY" --json url --jq .url)
-            echo "### Production approval required" >>"$GITHUB_STEP_SUMMARY"
-            echo "Approve the CODEOWNERS review on [production promotion PR #${PR_NUMBER}](${pr_url})." >>"$GITHUB_STEP_SUMMARY"
-            echo "After approval, GitHub merges the PR and Argo CD auto-syncs lab-a production." >>"$GITHUB_STEP_SUMMARY"
-          else
-            current_digest=$(sed -nE 's/^[[:space:]]*digest: (sha256:[0-9a-f]{64})$/\1/p' \
-              ultimate-iac/argocd/applications/podinfo/clusters/lab-a/prod/kustomization.yaml)
-            [[ $current_digest == "$IMAGE_DIGEST" ]] || {
-              echo "no production PR was created and main does not contain the requested digest" >&2
-              exit 1
-            }
-            echo "### Production already promoted" >>"$GITHUB_STEP_SUMMARY"
-            echo "lab-a production already references \`${IMAGE_REPOSITORY}@${IMAGE_DIGEST}\`." >>"$GITHUB_STEP_SUMMARY"
           fi
+
+          echo "All required checks passed for application PR #${APPLICATION_PR}."
