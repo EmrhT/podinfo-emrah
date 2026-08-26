@@ -21,11 +21,13 @@ env:
   SONAR_HOST_URL: https://ci-sonarqube.no-name.win
   TRIVY_SERVER_URL: https://ci-trivy.no-name.win
   ZAP_API_URL: https://ci-zap.no-name.win
+  DEFECTDOJO_URL: https://ci-dojo.no-name.win
   ARGOCD_SERVER: ci-argocd.no-name.win
   IAC_REPOSITORY: EmrhT/ultimate-iac
   ARGOCD_VERSION: v3.4.2
   TRIVY_VERSION: v0.73.0
   TRIVY_ENFORCE: "false"
+  DEFECTDOJO_ENFORCE: "false"
   SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
   APPLICATION_PR: ${{ github.event.pull_request.number }}
 
@@ -315,6 +317,27 @@ jobs:
             echo "Full JSON, table, and SARIF reports are attached to this workflow run."
           } >>"$GITHUB_STEP_SUMMARY"
 
+      - name: Send Trivy report to DefectDojo
+        id: defectdojo
+        continue-on-error: ${{ env.DEFECTDOJO_ENFORCE != 'true' }}
+        env:
+          DEFECTDOJO_API_TOKEN: ${{ secrets.DEFECTDOJO_API_TOKEN }}
+          DEFECTDOJO_ENGAGEMENT_ID: ${{ vars.DEFECTDOJO_ENGAGEMENT_ID }}
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: >-
+          .github/scripts/defectdojo-reimport.sh
+          "Trivy Scan"
+          "Trivy image scan"
+          reports/trivy.json
+
+      - name: Summarize DefectDojo Trivy ingestion
+        if: always()
+        env:
+          INGESTION_OUTCOME: ${{ steps.defectdojo.outcome }}
+        run: |
+          echo "DefectDojo Trivy ingestion: $INGESTION_OUTCOME" >>"$GITHUB_STEP_SUMMARY"
+
       - name: Enforce Trivy vulnerability gate
         if: env.TRIVY_ENFORCE == 'true'
         run: |
@@ -402,7 +425,7 @@ jobs:
           IMAGE_DIGEST: ${{ needs.build.outputs.digest }}
         run: |
           if [[ -n $PR_NUMBER ]]; then
-            gh pr merge "$PR_NUMBER" --repo "$IAC_REPOSITORY" --auto --squash
+            .github/scripts/merge-gitops-pr.sh "$IAC_REPOSITORY" "$PR_NUMBER"
             for _ in {1..60}; do
               state=$(gh pr view "$PR_NUMBER" --repo "$IAC_REPOSITORY" --json state --jq .state)
               [[ $state == MERGED ]] && break
@@ -490,6 +513,28 @@ jobs:
           path: reports/
           if-no-files-found: warn
           retention-days: 14
+
+      - name: Send ZAP report to DefectDojo
+        id: defectdojo
+        if: always() && hashFiles('reports/zap.xml') != ''
+        continue-on-error: ${{ env.DEFECTDOJO_ENFORCE != 'true' }}
+        env:
+          DEFECTDOJO_API_TOKEN: ${{ secrets.DEFECTDOJO_API_TOKEN }}
+          DEFECTDOJO_ENGAGEMENT_ID: ${{ vars.DEFECTDOJO_ENGAGEMENT_ID }}
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: >-
+          .github/scripts/defectdojo-reimport.sh
+          "ZAP Scan"
+          "ZAP DAST lab-a-dev"
+          reports/zap.xml
+
+      - name: Summarize DefectDojo ZAP ingestion
+        if: always()
+        env:
+          INGESTION_OUTCOME: ${{ steps.defectdojo.outcome }}
+        run: |
+          echo "DefectDojo ZAP ingestion: $INGESTION_OUTCOME" >>"$GITHUB_STEP_SUMMARY"
 
       - name: Enforce ZAP gate
         if: steps.zap.outcome != 'success'
