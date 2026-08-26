@@ -60,6 +60,16 @@ curl "${curl_common[@]}" "${zap_headers[@]}" --get \
   --data-urlencode "baseurl=$target_url" \
   "$ZAP_API_URL/JSON/core/view/alerts/" >"$report_dir/zap-alerts.json"
 
+# DefectDojo's native ZAP parser consumes the traditional ZAP XML format.
+# ZAP 2.17 keeps this compatibility endpoint even though newer report
+# generation is file-based inside the daemon container.
+curl "${curl_common[@]}" "${zap_headers[@]}" \
+  "$ZAP_API_URL/OTHER/core/other/xmlreport/" >"$report_dir/zap.xml"
+grep -q '<OWASPZAPReport' "$report_dir/zap.xml" || {
+  echo "ZAP returned an invalid XML report" >&2
+  exit 1
+}
+
 plan_errors=$(jq '.error | length' "$report_dir/zap-plan-progress.json")
 high_alerts=$(jq '[.alerts[] | select(.risk == "High" or .riskcode == "3")] | length' \
   "$report_dir/zap-alerts.json")

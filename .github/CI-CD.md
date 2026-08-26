@@ -57,11 +57,13 @@ Repository secrets:
 - `SONAR_MTLS_KEYSTORE_PASSWORD`
 - `ZAP_API_KEY`
 - `ARGOCD_AUTH_TOKEN`
+- `DEFECTDOJO_API_TOKEN`
 - `IAC_PROMOTER_PRIVATE_KEY`
 
 Repository variable:
 
 - `IAC_PROMOTER_CLIENT_ID`
+- `DEFECTDOJO_ENGAGEMENT_ID`
 
 The Cloudflare service token is `github-actions-podinfo-dev`. The GitHub App is
 scoped to `EmrhT/ultimate-iac` with Contents and Pull requests write
@@ -87,6 +89,9 @@ Kubernetes.
 - Trivy must complete, but vulnerability findings remain non-blocking while
   `TRIVY_ENFORCE=false`.
 - ZAP fails on plan errors or High-risk alerts.
+- Trivy JSON and ZAP XML reports are reimported into the stable DefectDojo
+  engagement through `ci-dojo.no-name.win`. Set `DEFECTDOJO_ENFORCE=true` in
+  the workflow only after the ingestion path has proven reliable.
 - Trivy, ZAP, and immutable promotion metadata artifacts are retained in the
   application workflow run.
 
