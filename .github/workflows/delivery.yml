@@ -425,7 +425,7 @@ jobs:
           IMAGE_DIGEST: ${{ needs.build.outputs.digest }}
         run: |
           if [[ -n $PR_NUMBER ]]; then
-            gh pr merge "$PR_NUMBER" --repo "$IAC_REPOSITORY" --auto --squash
+            .github/scripts/merge-gitops-pr.sh "$IAC_REPOSITORY" "$PR_NUMBER"
             for _ in {1..60}; do
               state=$(gh pr view "$PR_NUMBER" --repo "$IAC_REPOSITORY" --json state --jq .state)
               [[ $state == MERGED ]] && break

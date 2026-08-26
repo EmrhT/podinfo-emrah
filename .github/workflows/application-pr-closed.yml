@@ -304,5 +304,5 @@ jobs:
           PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
         run: |
           if [[ -n $PR_NUMBER ]]; then
-            gh pr merge "$PR_NUMBER" --repo "$IAC_REPOSITORY" --auto --squash
+            .github/scripts/merge-gitops-pr.sh "$IAC_REPOSITORY" "$PR_NUMBER"
           fi
