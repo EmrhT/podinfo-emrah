@@ -11,7 +11,10 @@ fi
 : "${SONAR_TOKEN:?SONAR_TOKEN is required}"
 : "${SONAR_PROJECT_KEY:?SONAR_PROJECT_KEY is required}"
 : "${SONAR_MTLS_PKCS12_PATH:?SONAR_MTLS_PKCS12_PATH is required}"
-: "${SONAR_MTLS_KEYSTORE_PASSWORD:?SONAR_MTLS_KEYSTORE_PASSWORD is required}"
+
+# OpenSSL permits PKCS#12 bundles with an empty import password. The existing
+# Sonar scanner configuration supports that, so the report exporter must too.
+SONAR_MTLS_KEYSTORE_PASSWORD=${SONAR_MTLS_KEYSTORE_PASSWORD:-}
 
 output_zip=$1
 report_dir=$(mktemp -d)
