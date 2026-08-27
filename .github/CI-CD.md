@@ -67,7 +67,9 @@ Repository variable:
 
 The workflow also pins the DefectDojo product to `podinfo` and engagement to
 `CI/CD`. Both the numeric engagement ID and its name are sent because background
-imports use the names when reconstructing the import context.
+imports use the names when reconstructing the import context. The reimport call
+enables automatic context creation so the first report creates its scanner Test;
+subsequent reports update that same Test.
 
 The Cloudflare service token is `github-actions-podinfo-dev`. The GitHub App is
 scoped to `EmrhT/ultimate-iac` with Contents and Pull requests write

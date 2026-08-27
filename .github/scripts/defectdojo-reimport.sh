@@ -47,6 +47,7 @@ http_status=$(curl \
   --form "engagement=$DEFECTDOJO_ENGAGEMENT_ID" \
   --form "engagement_name=$DEFECTDOJO_ENGAGEMENT_NAME" \
   --form "product_name=$DEFECTDOJO_PRODUCT_NAME" \
+  --form 'auto_create_context=true' \
   --form "file=@$report_file" \
   --form 'minimum_severity=Info' \
   --form 'active=true' \
