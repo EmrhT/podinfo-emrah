@@ -95,10 +95,10 @@ Kubernetes.
 - Trivy must complete, but vulnerability findings remain non-blocking while
   `TRIVY_ENFORCE=false`.
 - ZAP fails on plan errors or High-risk alerts.
-- Trivy JSON and ZAP XML reports are reimported into the stable DefectDojo
+- SonarQube API JSON, Trivy JSON, and ZAP XML reports are reimported into the stable DefectDojo
   engagement through `ci-dojo.no-name.win`. DefectDojo ingestion is enforced:
-  a delivery cannot pass when either report is not accepted.
-- Trivy, ZAP, and immutable promotion metadata artifacts are retained in the
+  a delivery cannot pass when a report is not accepted.
+- SonarQube, Trivy, ZAP, and immutable promotion metadata artifacts are retained in the
   application workflow run.
 
 ZAP uses a clean volatile session for every CI scan. Do not run a manual scan
