@@ -65,6 +65,12 @@ Repository variable:
 - `IAC_PROMOTER_CLIENT_ID`
 - `DEFECTDOJO_ENGAGEMENT_ID`
 
+The workflow also pins the DefectDojo product to `podinfo` and engagement to
+`CI/CD`. Both the numeric engagement ID and its name are sent because background
+imports use the names when reconstructing the import context. The reimport call
+enables automatic context creation so the first report creates its scanner Test;
+subsequent reports update that same Test.
+
 The Cloudflare service token is `github-actions-podinfo-dev`. The GitHub App is
 scoped to `EmrhT/ultimate-iac` with Contents and Pull requests write
 permissions.
@@ -90,8 +96,8 @@ Kubernetes.
   `TRIVY_ENFORCE=false`.
 - ZAP fails on plan errors or High-risk alerts.
 - Trivy JSON and ZAP XML reports are reimported into the stable DefectDojo
-  engagement through `ci-dojo.no-name.win`. Set `DEFECTDOJO_ENFORCE=true` in
-  the workflow only after the ingestion path has proven reliable.
+  engagement through `ci-dojo.no-name.win`. DefectDojo ingestion is enforced:
+  a delivery cannot pass when either report is not accepted.
 - Trivy, ZAP, and immutable promotion metadata artifacts are retained in the
   application workflow run.
 

@@ -22,12 +22,14 @@ env:
   TRIVY_SERVER_URL: https://ci-trivy.no-name.win
   ZAP_API_URL: https://ci-zap.no-name.win
   DEFECTDOJO_URL: https://ci-dojo.no-name.win
+  DEFECTDOJO_PRODUCT_NAME: podinfo
+  DEFECTDOJO_ENGAGEMENT_NAME: CI/CD
   ARGOCD_SERVER: ci-argocd.no-name.win
   IAC_REPOSITORY: EmrhT/ultimate-iac
   ARGOCD_VERSION: v3.4.2
   TRIVY_VERSION: v0.73.0
   TRIVY_ENFORCE: "false"
-  DEFECTDOJO_ENFORCE: "false"
+  DEFECTDOJO_ENFORCE: "true"
   SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
   APPLICATION_PR: ${{ github.event.pull_request.number }}
 
@@ -251,6 +253,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Checkout pipeline helpers
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+
       - name: Setup Trivy client
         uses: aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514 # v0.2.6
         with:
@@ -323,6 +330,8 @@ jobs:
         env:
           DEFECTDOJO_API_TOKEN: ${{ secrets.DEFECTDOJO_API_TOKEN }}
           DEFECTDOJO_ENGAGEMENT_ID: ${{ vars.DEFECTDOJO_ENGAGEMENT_ID }}
+          DEFECTDOJO_ENGAGEMENT_NAME: ${{ env.DEFECTDOJO_ENGAGEMENT_NAME }}
+          DEFECTDOJO_PRODUCT_NAME: ${{ env.DEFECTDOJO_PRODUCT_NAME }}
           CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
           CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
         run: >-
@@ -521,6 +530,8 @@ jobs:
         env:
           DEFECTDOJO_API_TOKEN: ${{ secrets.DEFECTDOJO_API_TOKEN }}
           DEFECTDOJO_ENGAGEMENT_ID: ${{ vars.DEFECTDOJO_ENGAGEMENT_ID }}
+          DEFECTDOJO_ENGAGEMENT_NAME: ${{ env.DEFECTDOJO_ENGAGEMENT_NAME }}
+          DEFECTDOJO_PRODUCT_NAME: ${{ env.DEFECTDOJO_PRODUCT_NAME }}
           CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
           CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
         run: >-
