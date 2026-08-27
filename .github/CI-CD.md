@@ -90,8 +90,8 @@ Kubernetes.
   `TRIVY_ENFORCE=false`.
 - ZAP fails on plan errors or High-risk alerts.
 - Trivy JSON and ZAP XML reports are reimported into the stable DefectDojo
-  engagement through `ci-dojo.no-name.win`. Set `DEFECTDOJO_ENFORCE=true` in
-  the workflow only after the ingestion path has proven reliable.
+  engagement through `ci-dojo.no-name.win`. DefectDojo ingestion is enforced:
+  a delivery cannot pass when either report is not accepted.
 - Trivy, ZAP, and immutable promotion metadata artifacts are retained in the
   application workflow run.
 

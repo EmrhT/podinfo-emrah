@@ -10,6 +10,7 @@ fi
 : "${DEFECTDOJO_URL:?DEFECTDOJO_URL is required}"
 : "${DEFECTDOJO_API_TOKEN:?DEFECTDOJO_API_TOKEN is required}"
 : "${DEFECTDOJO_ENGAGEMENT_ID:?DEFECTDOJO_ENGAGEMENT_ID is required}"
+: "${DEFECTDOJO_PRODUCT_NAME:?DEFECTDOJO_PRODUCT_NAME is required}"
 : "${CF_ACCESS_CLIENT_ID:?CF_ACCESS_CLIENT_ID is required}"
 : "${CF_ACCESS_CLIENT_SECRET:?CF_ACCESS_CLIENT_SECRET is required}"
 
@@ -43,6 +44,7 @@ http_status=$(curl \
   --form "scan_type=$scan_type" \
   --form "test_title=$test_title" \
   --form "engagement=$DEFECTDOJO_ENGAGEMENT_ID" \
+  --form "product_name=$DEFECTDOJO_PRODUCT_NAME" \
   --form "file=@$report_file" \
   --form 'minimum_severity=Info' \
   --form 'active=true' \
@@ -62,4 +64,3 @@ fi
 jq -e . "$response_file" >/dev/null
 test_id=$(jq -r '.test // .id // "unknown"' "$response_file")
 echo "DefectDojo accepted '$scan_type' as test $test_id"
-
