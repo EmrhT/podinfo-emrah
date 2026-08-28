@@ -8,7 +8,7 @@ if [[ $# -ne 1 ]]; then
 fi
 
 : "${SONAR_HOST_URL:?SONAR_HOST_URL is required}"
-: "${SONAR_TOKEN:?SONAR_TOKEN is required}"
+: "${SONAR_REPORT_TOKEN:?SONAR_REPORT_TOKEN is required}"
 : "${SONAR_PROJECT_KEY:?SONAR_PROJECT_KEY is required}"
 : "${SONAR_MTLS_PKCS12_PATH:?SONAR_MTLS_PKCS12_PATH is required}"
 
@@ -56,7 +56,7 @@ fetch_pages() {
       --cert-type P12 \
       --cert "$SONAR_MTLS_PKCS12_PATH:$SONAR_MTLS_KEYSTORE_PASSWORD" \
       --header "Accept: application/json" \
-      --header "Authorization: Bearer $SONAR_TOKEN" \
+      --header "Authorization: Bearer $SONAR_REPORT_TOKEN" \
       --get \
       --data-urlencode "$project_parameter=$SONAR_PROJECT_KEY" \
       --data-urlencode "p=$page" \
