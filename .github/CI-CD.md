@@ -53,8 +53,9 @@ Repository secrets:
 - `CF_ACCESS_CLIENT_ID`
 - `CF_ACCESS_CLIENT_SECRET`
 - `SONAR_TOKEN`
+- `SONAR_REPORT_TOKEN` (user token with Browse permission on `podinfo-emrah`)
 - `SONAR_MTLS_PKCS12_BASE64`
-- `SONAR_MTLS_KEYSTORE_PASSWORD`
+- `SONAR_MTLS_KEYSTORE_PASSWORD` (optional when the PKCS#12 bundle has an empty password)
 - `ZAP_API_KEY`
 - `ARGOCD_AUTH_TOKEN`
 - `DEFECTDOJO_API_TOKEN`
@@ -95,10 +96,10 @@ Kubernetes.
 - Trivy must complete, but vulnerability findings remain non-blocking while
   `TRIVY_ENFORCE=false`.
 - ZAP fails on plan errors or High-risk alerts.
-- Trivy JSON and ZAP XML reports are reimported into the stable DefectDojo
+- SonarQube API JSON, Trivy JSON, and ZAP XML reports are reimported into the stable DefectDojo
   engagement through `ci-dojo.no-name.win`. DefectDojo ingestion is enforced:
-  a delivery cannot pass when either report is not accepted.
-- Trivy, ZAP, and immutable promotion metadata artifacts are retained in the
+  a delivery cannot pass when a report is not accepted.
+- SonarQube, Trivy, ZAP, and immutable promotion metadata artifacts are retained in the
   application workflow run.
 
 ZAP uses a clean volatile session for every CI scan. Do not run a manual scan
