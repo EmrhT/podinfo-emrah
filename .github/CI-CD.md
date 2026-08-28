@@ -53,6 +53,7 @@ Repository secrets:
 - `CF_ACCESS_CLIENT_ID`
 - `CF_ACCESS_CLIENT_SECRET`
 - `SONAR_TOKEN`
+- `SONAR_REPORT_TOKEN` (user token with Browse permission on `podinfo-emrah`)
 - `SONAR_MTLS_PKCS12_BASE64`
 - `SONAR_MTLS_KEYSTORE_PASSWORD` (optional when the PKCS#12 bundle has an empty password)
 - `ZAP_API_KEY`

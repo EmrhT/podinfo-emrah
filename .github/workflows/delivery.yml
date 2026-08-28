@@ -127,7 +127,7 @@ jobs:
 
       - name: Export SonarQube report
         env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_REPORT_TOKEN }}
           SONAR_MTLS_PKCS12_PATH: ${{ runner.temp }}/sonarqube/client.p12
           SONAR_MTLS_KEYSTORE_PASSWORD: ${{ secrets.SONAR_MTLS_KEYSTORE_PASSWORD }}
         run: bash .github/scripts/sonarqube-report.sh reports/sonarqube.zip
