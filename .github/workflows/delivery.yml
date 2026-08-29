@@ -29,12 +29,114 @@ env:
   IAC_REPOSITORY: EmrhT/ultimate-iac
   ARGOCD_VERSION: v3.4.2
   TRIVY_VERSION: v0.73.0
+  GITLEAKS_VERSION: 8.30.1
+  GITLEAKS_LINUX_X64_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
   TRIVY_ENFORCE: "false"
   DEFECTDOJO_ENFORCE: "true"
   SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+  BASE_SHA: ${{ github.event.pull_request.base.sha }}
   APPLICATION_PR: ${{ github.event.pull_request.number }}
 
 jobs:
+  secrets:
+    name: Gitleaks secret scan
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout complete pull-request history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
+
+      - name: Install verified Gitleaks CLI
+        run: |
+          archive="$RUNNER_TEMP/gitleaks.tar.gz"
+          curl --fail-with-body --silent --show-error --location \
+            --retry 3 --retry-all-errors \
+            --output "$archive" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_LINUX_X64_SHA256}  ${archive}" | sha256sum --check --strict
+          tar --extract --gzip --file "$archive" --directory "$RUNNER_TEMP" gitleaks
+          chmod 755 "$RUNNER_TEMP/gitleaks"
+          echo "$RUNNER_TEMP" >>"$GITHUB_PATH"
+          "$RUNNER_TEMP/gitleaks" version
+
+      - name: Scan pull-request commits
+        id: scan
+        run: |
+          mkdir -p reports
+          scan_status=0
+          gitleaks git \
+            --no-banner \
+            --no-color \
+            --redact=100 \
+            --timeout=300 \
+            --exit-code=5 \
+            --report-format=json \
+            --report-path=reports/gitleaks.json \
+            --log-opts="${BASE_SHA}..${SOURCE_SHA}" \
+            . || scan_status=$?
+
+          case "$scan_status" in
+            0)
+              echo "leaks-found=false" >>"$GITHUB_OUTPUT"
+              ;;
+            5)
+              echo "leaks-found=true" >>"$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "Gitleaks failed to execute (exit ${scan_status})" >&2
+              exit "$scan_status"
+              ;;
+          esac
+
+          jq -e 'type == "array"' reports/gitleaks.json >/dev/null
+          echo "finding-count=$(jq 'length' reports/gitleaks.json)" >>"$GITHUB_OUTPUT"
+
+      - name: Retain redacted Gitleaks report
+        if: always() && hashFiles('reports/gitleaks.json') != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: gitleaks-${{ env.SOURCE_SHA }}
+          path: reports/gitleaks.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Send Gitleaks report to DefectDojo
+        id: defectdojo-gitleaks
+        continue-on-error: ${{ env.DEFECTDOJO_ENFORCE != 'true' }}
+        env:
+          DEFECTDOJO_API_TOKEN: ${{ secrets.DEFECTDOJO_API_TOKEN }}
+          DEFECTDOJO_ENGAGEMENT_ID: ${{ vars.DEFECTDOJO_ENGAGEMENT_ID }}
+          DEFECTDOJO_ENGAGEMENT_NAME: ${{ env.DEFECTDOJO_ENGAGEMENT_NAME }}
+          DEFECTDOJO_PRODUCT_NAME: ${{ env.DEFECTDOJO_PRODUCT_NAME }}
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: >-
+          .github/scripts/defectdojo-reimport.sh
+          "Gitleaks Scan"
+          "Gitleaks pull-request scan"
+          reports/gitleaks.json
+
+      - name: Summarize secret scan
+        if: always()
+        env:
+          FINDING_COUNT: ${{ steps.scan.outputs.finding-count }}
+          LEAKS_FOUND: ${{ steps.scan.outputs.leaks-found }}
+          INGESTION_OUTCOME: ${{ steps.defectdojo-gitleaks.outcome }}
+        run: |
+          {
+            echo "### Gitleaks secret scan (findings are non-blocking)"
+            echo
+            echo "Findings: ${FINDING_COUNT:-unknown}"
+            echo "Potential secrets detected: ${LEAKS_FOUND:-unknown}"
+            echo "DefectDojo ingestion: ${INGESTION_OUTCOME:-unknown}"
+            echo
+            echo "The retained JSON is fully redacted; rotate any real credential before dismissing a finding."
+          } >>"$GITHUB_STEP_SUMMARY"
+
   quality:
     name: Unit tests and SAST
     if: github.event.pull_request.head.repo.full_name == github.repository
@@ -180,7 +282,9 @@ jobs:
 
   build:
     name: Build and publish image
-    needs: quality
+    needs:
+      - quality
+      - secrets
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
