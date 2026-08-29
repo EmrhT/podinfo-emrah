@@ -9,14 +9,16 @@ environment before a human can merge it into `podinfo-emrah/master`.
 The `application PR delivery` workflow runs for same-repository pull requests
 targeting `master`:
 
-1. Run unit tests and send source analysis to the homelab SonarQube.
-2. Build `linux/amd64` and publish only the immutable
+1. Scan commits introduced by the pull request with Gitleaks and send the fully
+   redacted JSON report to DefectDojo. Findings are reported but do not block delivery.
+2. Run unit tests and send source analysis to the homelab SonarQube.
+3. Build `linux/amd64` and publish only the immutable
    `ghcr.io/emrht/podinfo-emrah:sha-<full-head-sha>` image.
-3. Scan that digest with the Trivy client against the homelab Trivy server.
-4. Open and automatically merge a digest-only GitOps PR for lab-a dev.
-5. Ask Argo CD to sync dev, then verify the expected digest and Healthy state.
-6. Run the in-cluster ZAP plan against the internal dev Service.
-7. Publish the `PR delivery gate` check. The application PR cannot merge until
+4. Scan that digest with the Trivy client against the homelab Trivy server.
+5. Open and automatically merge a digest-only GitOps PR for lab-a dev.
+6. Ask Argo CD to sync dev, then verify the expected digest and Healthy state.
+7. Run the in-cluster ZAP plan against the internal dev Service.
+8. Publish the `PR delivery gate` check. The application PR cannot merge until
    every preceding stage succeeds.
 
 The workflow group `podinfo-lab-a-delivery` serializes access to the shared dev
@@ -96,7 +98,7 @@ Kubernetes.
 - Trivy must complete, but vulnerability findings remain non-blocking while
   `TRIVY_ENFORCE=false`.
 - ZAP fails on plan errors or High-risk alerts.
-- SonarQube API JSON, Trivy JSON, and ZAP XML reports are reimported into the stable DefectDojo
+- Redacted Gitleaks JSON, SonarQube API JSON, Trivy JSON, and ZAP XML reports are reimported into the stable DefectDojo
   engagement through `ci-dojo.no-name.win`. DefectDojo ingestion is enforced:
   a delivery cannot pass when a report is not accepted.
 - SonarQube, Trivy, ZAP, and immutable promotion metadata artifacts are retained in the

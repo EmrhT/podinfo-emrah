@@ -31,34 +31,48 @@ report_file=$3
 response_file=$(mktemp)
 trap 'rm -f "$response_file"' EXIT
 
-http_status=$(curl \
-  --silent \
-  --show-error \
-  --connect-timeout 20 \
-  --max-time 300 \
-  --output "$response_file" \
-  --write-out '%{http_code}' \
-  --header "Accept: application/json" \
-  --header "Authorization: Token $DEFECTDOJO_API_TOKEN" \
-  --header "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" \
-  --header "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" \
-  --form "scan_type=$scan_type" \
-  --form "test_title=$test_title" \
-  --form "engagement=$DEFECTDOJO_ENGAGEMENT_ID" \
-  --form "engagement_name=$DEFECTDOJO_ENGAGEMENT_NAME" \
-  --form "product_name=$DEFECTDOJO_PRODUCT_NAME" \
-  --form 'auto_create_context=true' \
-  --form "file=@$report_file" \
-  --form 'minimum_severity=Info' \
-  --form 'active=true' \
-  --form 'verified=false' \
-  --form 'close_old_findings=true' \
-  --form "build_id=${GITHUB_RUN_ID:-manual}-${GITHUB_RUN_ATTEMPT:-1}" \
-  --form "commit_hash=${SOURCE_SHA:-unknown}" \
-  --form "branch_tag=${GITHUB_HEAD_REF:-unknown}" \
-  "$DEFECTDOJO_URL/api/v2/reimport-scan/")
+upload_report() {
+  local endpoint=$1
+  curl \
+    --silent \
+    --show-error \
+    --http1.1 \
+    --connect-timeout 20 \
+    --max-time 300 \
+    --retry 3 \
+    --retry-all-errors \
+    --retry-delay 2 \
+    --output "$response_file" \
+    --write-out '%{http_code}' \
+    --header "Accept: application/json" \
+    --header 'Expect:' \
+    --header "Authorization: Token $DEFECTDOJO_API_TOKEN" \
+    --header "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" \
+    --header "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" \
+    --form "scan_type=$scan_type" \
+    --form "test_title=$test_title" \
+    --form "engagement=$DEFECTDOJO_ENGAGEMENT_ID" \
+    --form "engagement_name=$DEFECTDOJO_ENGAGEMENT_NAME" \
+    --form "product_name=$DEFECTDOJO_PRODUCT_NAME" \
+    --form 'auto_create_context=true' \
+    --form "file=@$report_file" \
+    --form 'minimum_severity=Info' \
+    --form 'active=true' \
+    --form 'verified=false' \
+    --form 'close_old_findings=true' \
+    --form "build_id=${GITHUB_RUN_ID:-manual}-${GITHUB_RUN_ATTEMPT:-1}" \
+    --form "commit_hash=${SOURCE_SHA:-unknown}" \
+    --form "branch_tag=${GITHUB_HEAD_REF:-unknown}" \
+    "$DEFECTDOJO_URL/api/v2/$endpoint/"
+}
 
-if [[ $http_status != 200 && $http_status != 201 ]]; then
+http_status=$(upload_report reimport-scan)
+if [[ $http_status == 400 ]]; then
+  echo "DefectDojo test '$test_title' may not exist yet; retrying with import-scan"
+  http_status=$(upload_report import-scan)
+fi
+
+if [[ $http_status != 200 && $http_status != 201 && $http_status != 202 ]]; then
   echo "DefectDojo rejected '$scan_type' with HTTP $http_status" >&2
   jq . "$response_file" >&2 2>/dev/null || head -c 2000 "$response_file" >&2
   exit 1
